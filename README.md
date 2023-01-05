@@ -51,14 +51,16 @@ It's a normal json file, but with comments (you're welcome)! One key benefit of 
 
 ```json
 {
-    "module_name": "executable.exe",
+    "module_name": "Notepad.exe",
 
-    // A comment!
-    "instructions": 
+    // [instruction in hex, number of matches allowed]
+    "intructions":
     [
-        "0x9090", // Instructions can have different lengths
-        "0x909090" // Decrement instruction (NAMING)
-        //"0x90" Do not replace me!
+        // A comment!
+        {"instruction": "0x90", "matches_allowed": 1}, // Instructions can have different lengths
+        {"instruction": "0x90", "matches_allowed": 2},
+        {"instruction": "0x9090", "matches_allowed": 16} // Nop sequence in the code
+        //"0x9090" do_not_replace me"
     ]
 }
 
