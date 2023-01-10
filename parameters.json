@@ -7,6 +7,7 @@
         // A comment!
         {"instruction": "0x90", "matches_allowed": 1}, // Instructions can have different lengths
         {"instruction": "0x90", "matches_allowed": 2},
+        {"instruction": "0x90", "matches_allowed": 1, "replace": true, "restore_original": true, "new_code": "0xCCCC", "nop_padding": 1},
         {"instruction": "0x9090", "matches_allowed": 16} // Nop sequence in the code
         //"0x9090" do_not_replace me"
     ]

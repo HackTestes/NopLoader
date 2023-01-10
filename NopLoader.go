@@ -41,7 +41,15 @@ func check(e error) {
 func main() {
 
     // Read and parse arguments
-    //fmt.Println(len(os.Args), os.Args);
+    if len(os.Args) < 3 {
+        fmt.Fprintln(os.Stderr, "Not enough arguments");
+        return;
+    }
+
+    no_write_mode := false;
+    if len(os.Args) == 4 && (os.Args[3] == "-n" || os.Args[3] == "--noWrite") {
+        no_write_mode = true;
+    }
 
     // Read configuration file
     jsonBytes, err := os.ReadFile(os.Args[2]);
@@ -136,10 +144,13 @@ func main() {
 
         // Replace the instruction for Nop (0x90)
         if len(results) > instruc_matches_allowed {
+
             fmt.Println("Too many matches: ", len(results));
             /*for _, result := range results {
                 fmt.Printf( "%X ", uintptr(result)+target_module_start );
             }*/
+            fmt.Println("");
+
         } else {
     
             byte_buffer := make([]byte, len(hex_instruc), len(hex_instruc))
@@ -148,11 +159,11 @@ func main() {
             }
 
             for i := range results{
-                base_address := target_module_start + uintptr(results[i]);
+                base_address := target_module_start + uintptr(results[i]); // + start 
                 var number_of_bytes_written uintptr = 0;
 
                 fmt.Println("WriteProcessMemory: ", process_handle, base_address, byte_buffer, uintptr(len(hex_instruc)), number_of_bytes_written);
-                check(windows.WriteProcessMemory(process_handle, base_address, &byte_buffer[0], uintptr(len(hex_instruc)), &number_of_bytes_written));
+                if no_write_mode == false {check(windows.WriteProcessMemory(process_handle, base_address, &byte_buffer[0], uintptr(len(hex_instruc)), &number_of_bytes_written));}
             }
 
             restore_buffer = append(restore_buffer, Pair[[]byte, []int]{first: hex_instruc, second: results});
@@ -161,7 +172,7 @@ func main() {
 
 
     // Restore original instructions (wait user to press ENTER)
-    fmt.Print("\nPress 'Enter' to restore process' original instructions...")
+    fmt.Print("\nPress 'ENTER' to restore process' original instructions...")
     bufio.NewReader(os.Stdin).ReadBytes('\n')
 
     for instruc_index := range restore_buffer {
@@ -173,7 +184,7 @@ func main() {
             var number_of_bytes_written uintptr = 0;
 
             fmt.Println("WriteProcessMemory: ", process_handle, base_address, original_instruction, uintptr(len(original_instruction)), number_of_bytes_written);
-            check(windows.WriteProcessMemory(process_handle, base_address, &original_instruction[0], uintptr(len(original_instruction)), &number_of_bytes_written));
+            if no_write_mode == false {check(windows.WriteProcessMemory(process_handle, base_address, &original_instruction[0], uintptr(len(original_instruction)), &number_of_bytes_written));}
         }
     }
 
