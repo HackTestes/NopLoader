@@ -71,7 +71,7 @@ func AsmBuildNewCode(hex_code string) []byte {
 
 // Injection_index is relative to the process_memory buffer
 func AsmRestoreOverwrittenCode(full_redirection_code_length int, process_memory []byte, injection_index int) []byte {
-	return process_memory[injection_index:full_redirection_code_length];
+	return process_memory[injection_index:injection_index+full_redirection_code_length];
 }
 
 // jmp redirection code ONLY (not the full redirection code), otherwise the rax register will never be restored after jmp back

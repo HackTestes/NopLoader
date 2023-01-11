@@ -18,6 +18,13 @@ import (
     value_array []int
 }*/
 
+type ProcessWriteInfo struct {
+    injection_indexes []int // This is NOT the absolute addresses
+    range_start int
+    range_size int
+    allocated_process_mem uintptr
+}
+
 type Pair[T any, U any] struct {
     first  T
     second U
@@ -39,6 +46,11 @@ func check(e error) {
 }
 
 func main() {
+
+    kernel32DLL := windows.NewLazySystemDLL("kernel32.dll");
+
+    VirtualAllocEx := kernel32DLL.NewProc("VirtualAllocEx");
+    VirtualFreeEx := kernel32DLL.NewProc("VirtualFreeEx");
 
     // Read and parse arguments
     if len(os.Args) < 3 {
@@ -110,7 +122,7 @@ func main() {
     check(windows.ReadProcessMemory(process_handle, target_module_start, &process_mem_copy[0], uintptr(target_module_size), &number_of_bytes_read));
 
 
-    restore_buffer := make([]Pair[[]byte, []int], 0);
+    restore_buffer := make([]ProcessWriteInfo, 0);
 
     fmt.Println(json_config["intructions"].([]interface{})[0].(map[string]interface{})["matches_allowed"] );
 
@@ -119,7 +131,6 @@ func main() {
 
         results := make([]int, 0, 1024);
         hex_instruc, err := hex.DecodeString(instruction_info.(map[string]interface{})["instruction"].(string)[2:]);
-        instruc_matches_allowed := int(instruction_info.(map[string]interface{})["matches_allowed"].(float64));
         check(err);
 
         //fmt.Println(instruc_index, instruction, hex_instruc);
@@ -142,7 +153,29 @@ func main() {
 
         //fmt.Println(results);
 
-        // Replace the instruction for Nop (0x90)
+        instruc_matches_allowed := int(instruction_info.(map[string]interface{})["matches_allowed"].(float64));
+        replace_range, ok := instruction_info.(map[string]interface{})["range"].(string);
+        range_start := 0;
+        range_size := len(hex_instruc);
+        if ok {
+            range_start, _ = strconv.Atoi(strings.Split(replace_range, ":")[0]);
+            range_size, _ = strconv.Atoi(strings.Split(replace_range, ":")[1]);
+            if range_size > len(hex_instruc) {range_size = len(hex_instruc);}
+        }
+
+        replace_code, ok := instruction_info.(map[string]interface{})["replace"].(bool);
+        restore_original := false;
+        new_code := "";
+        nop_padding := 0;
+        if ok {
+            restore_original = instruction_info.(map[string]interface{})["restore_original"].(bool);
+            new_code = instruction_info.(map[string]interface{})["new_code"].(string);
+            nop_padding = int(instruction_info.(map[string]interface{})["nop_padding"].(float64));
+        } else {
+            replace_code = false;
+        }
+
+
         if len(results) > instruc_matches_allowed {
 
             fmt.Println("Too many matches: ", len(results));
@@ -152,21 +185,47 @@ func main() {
             fmt.Println("");
 
         } else {
-    
-            byte_buffer := make([]byte, len(hex_instruc), len(hex_instruc))
-            for i := range byte_buffer {
-                byte_buffer[i] = 0x90;
+
+            // Replace the instruction for Nop (0x90)
+            if replace_code == false {
+                byte_buffer := AsmBuildNop(range_size);
+
+                for i := range results {
+                    base_address := target_module_start + uintptr(results[i]) + uintptr(range_start);
+                    var number_of_bytes_written uintptr = 0;
+
+                    fmt.Println("WriteProcessMemory: ", process_handle, base_address, byte_buffer, uintptr(range_size), number_of_bytes_written);
+                    if no_write_mode == false {check(windows.WriteProcessMemory(process_handle, base_address, &byte_buffer[0], uintptr(range_size), &number_of_bytes_written));}
+                }
+                restore_buffer = append(restore_buffer, ProcessWriteInfo{injection_indexes: results, range_start: range_start, range_size: range_size, allocated_process_mem: 0});
+
+                // Inject new code
+                } else {
+
+                    allocated_mem_address, _, _:= VirtualAllocEx.Call(uintptr(process_handle), 0, 1024, windows.MEM_COMMIT, windows.PAGE_EXECUTE_READ);
+                    //check(err);
+                    full_redirection_code := AsmBuildRedirectionCode( AsmJmpToAbsoluteAddress(allocated_mem_address), AsmRestoreRegisterFromJmp(), nop_padding );
+                    new_codes_byte := AsmBuildNewCode(new_code);
+                    jmp_code_size := len(AsmJmpToAbsoluteAddress(0));
+
+                    // Only 1 result will be considered
+                    injection_index := uintptr(results[0]) + uintptr(range_start);
+                    injection_address := target_module_start + injection_index;
+                    overwritten_code := AsmRestoreOverwrittenCode(len(full_redirection_code), process_mem_copy, int(injection_index));
+                    var number_of_bytes_written uintptr = 0;
+
+                    full_injected_code := AsmBuildFullInjectedCode(injection_address, jmp_code_size, restore_original, new_codes_byte, overwritten_code);
+
+                    // Write redirection code
+                    fmt.Println("WriteProcessMemory(redirect): ", process_handle, injection_address, full_redirection_code, uintptr(len(full_redirection_code)), number_of_bytes_written);
+                    if no_write_mode == false {check(windows.WriteProcessMemory(process_handle, injection_address, &full_redirection_code[0], uintptr(len(full_redirection_code)), &number_of_bytes_written));}
+
+                    // Write injected code
+                    fmt.Println("WriteProcessMemory(inject): ", process_handle, allocated_mem_address, full_injected_code, uintptr(len(full_injected_code)), number_of_bytes_written);
+                    if no_write_mode == false {check(windows.WriteProcessMemory(process_handle, allocated_mem_address, &full_injected_code[0], uintptr(len(full_injected_code)), &number_of_bytes_written));}
+
+                    restore_buffer = append(restore_buffer, ProcessWriteInfo{injection_indexes: results[0:1], range_start: range_start, range_size: len(full_redirection_code), allocated_process_mem: allocated_mem_address});
             }
-
-            for i := range results{
-                base_address := target_module_start + uintptr(results[i]); // + start 
-                var number_of_bytes_written uintptr = 0;
-
-                fmt.Println("WriteProcessMemory: ", process_handle, base_address, byte_buffer, uintptr(len(hex_instruc)), number_of_bytes_written);
-                if no_write_mode == false {check(windows.WriteProcessMemory(process_handle, base_address, &byte_buffer[0], uintptr(len(hex_instruc)), &number_of_bytes_written));}
-            }
-
-            restore_buffer = append(restore_buffer, Pair[[]byte, []int]{first: hex_instruc, second: results});
         }
     }
 
@@ -176,15 +235,25 @@ func main() {
     bufio.NewReader(os.Stdin).ReadBytes('\n')
 
     for instruc_index := range restore_buffer {
-        original_instruction := restore_buffer[instruc_index].first;
-        module_relative_addresses := restore_buffer[instruc_index].second;
+        injection_range_start := restore_buffer[instruc_index].range_start;
+        injection_range_size := restore_buffer[instruc_index].range_size;
+        new_injected_code_mem := restore_buffer[instruc_index].allocated_process_mem;
+        module_relative_addresses := restore_buffer[instruc_index].injection_indexes;
 
         for i := range module_relative_addresses {
-            base_address := target_module_start + uintptr(module_relative_addresses[i]);
+            injection_start := module_relative_addresses[i]+injection_range_start;
+            original_instruction := process_mem_copy[ injection_start:injection_start+injection_range_size ];
+            base_address := target_module_start + uintptr(module_relative_addresses[i]) + uintptr(restore_buffer[instruc_index].range_start);
             var number_of_bytes_written uintptr = 0;
 
             fmt.Println("WriteProcessMemory: ", process_handle, base_address, original_instruction, uintptr(len(original_instruction)), number_of_bytes_written);
             if no_write_mode == false {check(windows.WriteProcessMemory(process_handle, base_address, &original_instruction[0], uintptr(len(original_instruction)), &number_of_bytes_written));}
+        }
+
+        if new_injected_code_mem != 0 {
+            VirtualFreeEx.Call(uintptr(process_handle), new_injected_code_mem, 0, windows.MEM_RELEASE);
+            //check(err);
+            fmt.Println("Redirect deallocated");
         }
     }
 

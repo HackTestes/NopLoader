@@ -7,8 +7,9 @@
         // A comment!
         {"instruction": "0x90", "matches_allowed": 1}, // Instructions can have different lengths
         {"instruction": "0x90", "matches_allowed": 2},
-        {"instruction": "0x90", "matches_allowed": 1, "replace": true, "restore_original": true, "new_code": "0xCCCC", "nop_padding": 1},
-        {"instruction": "0x9090", "matches_allowed": 16} // Nop sequence in the code
+        {"instruction": "0x90909090", "matches_allowed": 2, "range": "1:3"}, // Range: [start_index:size_bytes]
+        {"instruction": "0x9090", "matches_allowed": 16, "replace": true, "restore_original": true, "new_code": "0xCC", "nop_padding": 0}
+        //{"instruction": "0x9090", "matches_allowed": 16} // Nop sequence in the code
         //"0x9090" do_not_replace me"
     ]
 }
