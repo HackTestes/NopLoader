@@ -9,11 +9,11 @@ main PROC
 
     ;REDIRECTED CODE
     pop rax                      ;RESTORE REGISTER AFTER JMP
-    nop                          ;CODE
+    nop                          ;NEW CODE
     nop                          ;RESTORE PARTS OF ORIGINAL IF NEEDED
     push rax                     ;SAVING REGISTER VALUE
     mov rax, 0FF000000000000FFh  ;ADDRESS = INJECTION ADDRESS + 13 BYTES
-    jmp rax
+    jmp rax                      ;JMP BACK
 
 
     ;"NEW CODE"
