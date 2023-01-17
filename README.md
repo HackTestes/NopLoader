@@ -133,7 +133,7 @@ Note: the redirection code takes 14 bytes in total and was assembled with [MASM]
 
 ### Finding code
 
-Now, how do we find code? You can use the [MemoryScanner](https://github.com/HackTestes/MemoryScanner) (another one of my projects) to find the address of a value and after getting it, you can setup a hadware breakpoint with your favorite debugger ([ba on Windbg](https://github.com/HackTestes/MemoryScanner)). This procedure will give you the instructions that read or write to a given address.
+Now, how do we find code? You can use the [MemoryScanner](https://github.com/HackTestes/MemoryScanner) (another one of my projects) to find the address of a value and after getting it, you can setup a hadware breakpoint with your favorite debugger ([ba on Windbg](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/ba--break-on-access-)). This procedure will give you the instructions that read or write to a given address.
 
 After all of this, you get the bytes related to the instructions you want to replace and put them in the JSON file (you can put more bytes to make it unique and use the range field).
 
